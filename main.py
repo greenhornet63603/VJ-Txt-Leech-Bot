@@ -56,11 +56,45 @@ async def upload(bot: Client, m: Message):
 
     try:
        with open(x, "r") as f:
-           content = f.read()
-       content = content.split("\n")
-       links = []
-       for i in content:
-           links.append(i.split("://", 1))
+           import re
+
+def parse_links(content):
+    links = []
+
+    url_pattern = r'(https?://[^\s]+)'
+
+    for line in content:
+        line = line.strip()
+        if not line:
+            continue
+
+        # extract URL first (most reliable)
+        url_match = re.search(url_pattern, line)
+        if not url_match:
+            continue
+
+        url = url_match.group(1).strip()
+
+        # remove URL from line to get title
+        name = re.sub(url_pattern, '', line)
+
+        # clean common separators & junk
+        name = (
+            name.replace("🎬", "")
+                .replace("»", "")
+                .replace("|", "")
+                .replace(":", "")
+                .replace("-", "")
+                .strip()
+        )
+
+        # fallback name if empty
+        if not name:
+            name = "Untitled Video"
+
+        links.append([name, url])
+
+    return links
        os.remove(x)
             # print(len(links)
     except:
