@@ -2,14 +2,19 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-FROM python:3.10.8-slim-buster
+FROM python:3.10-slim
+
 RUN apt-get update -y && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends gcc libffi-dev musl-dev ffmpeg aria2 python3-pip \
+    && apt-get install -y --no-install-recommends \
+    gcc libffi-dev ffmpeg aria2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . /app/
-WORKDIR /app/
-RUN pip3 install --no-cache-dir --upgrade --requirement requirements.txt
-CMD gunicorn app:app & python3 main.py
+WORKDIR /app
 
+COPY . /app/
+
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+
+# Better: choose ONE entrypoint (recommended for Render bots)
+CMD ["python3", "main.py"]
