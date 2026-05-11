@@ -59,18 +59,28 @@ def parse_links(content):
         if not line:
             continue
 
-        urls = re.findall(r'https?://\S+', line)
+        # Extract URL
+        urls = re.findall(r'https?://[^\s]+', line)
 
         if not urls:
             continue
 
         url = urls[0].strip()
 
+        # Skip broken encoded classplus links
+        if "media-cdn.classplusapp.comL" in url:
+            continue
+
         # Remove URL from title
         title = line.replace(url, "").strip()
 
-        # Clean title
-        title = re.sub(r'[|:»🎬]+', '', title).strip()
+        # Clean dangerous chars
+        title = re.sub(r'[\\/:*?"<>|#@]+', '', title)
+
+        # Remove emojis
+        title = re.sub(r'[^\w\s.-]', '', title)
+
+        title = title.strip()
 
         if not title:
             title = "Untitled"
@@ -235,22 +245,32 @@ async def upload(bot: Client, m: Message):
 
             # ---------------- Classplus ---------------- #
 
-            elif "videos.classplusapp" in url:
+            elif (
+                "classplusapp" in url
+                or "media-cdn.classplusapp.com" in url
+            ):
 
                 try:
 
-                    response = requests.get(
-                        f'https://api.classplusapp.com/cams/uploader/video/jw-signed-url?url={url}',
-                        timeout=20
-                    )
+                    # Already signed URL
+                    if "Expires=" in url or "Signature=" in url:
+                        pass
 
-                    data = response.json()
+                    else:
 
-                    if "url" in data:
-                        url = data["url"]
+                        response = requests.get(
+                            "https://api.classplusapp.com/cams/uploader/video/jw-signed-url",
+                            params={"url": url},
+                            timeout=20
+                        )
 
-                except:
-                    pass
+                        data = response.json()
+
+                        if "url" in data:
+                            url = data["url"]
+
+                except Exception as e:
+                    print(e)
 
             # ---------------- MPD FIX ---------------- #
 
@@ -262,27 +282,32 @@ async def upload(bot: Client, m: Message):
 
             # ---------------- SAFE FILE NAME ---------------- #
 
-            name1 = (
-                links[i][0]
+            name1 = links[i][0]
+
+            # Remove emojis and dangerous chars
+            safe_name = re.sub(r'[^\w\s.-]', '', name1)
+
+            safe_name = (
+                safe_name
                 .replace("\t", "")
                 .replace(":", "")
                 .replace("/", "")
-                .replace("+", "")
-                .replace("#", "")
+                .replace("\\", "")
                 .replace("|", "")
-                .replace("@", "")
                 .replace("*", "")
-                .replace(".", "")
-                .replace("https", "")
-                .replace("http", "")
+                .replace("?", "")
+                .replace("<", "")
+                .replace(">", "")
+                .replace('"', "")
                 .strip()
             )
 
-            safe_name = re.sub(r'[\\/:*?"<>|()]', "", name1)
-
             safe_name = safe_name.replace(" ", "_")
 
-            name = f'{str(count).zfill(3)}_{safe_name[:60]}'
+            if not safe_name:
+                safe_name = "video"
+
+            name = f'{str(count).zfill(3)}_{safe_name[:80]}'
 
             # ---------------- FORMAT ---------------- #
 
@@ -303,24 +328,18 @@ async def upload(bot: Client, m: Message):
 
             # ---------------- YT-DLP CMD ---------------- #
 
-            if "jw-prod" in url or "m3u8" in url:
-
-                cmd = (
-                    f'yt-dlp '
-                    f'--add-header "Referer:https://web.classplusapp.com/" '
-                    f'--add-header "User-Agent:Mozilla/5.0" '
-                    f'-o "{name}.mp4" "{url}"'
-                )
-
-            else:
-
-                cmd = (
-                    f'yt-dlp '
-                    f'--add-header "Referer:https://web.classplusapp.com/" '
-                    f'--add-header "User-Agent:Mozilla/5.0" '
-                    f'-f "{ytf}" "{url}" '
-                    f'-o "{name}.mp4"'
-                )
+            cmd = (
+                f'yt-dlp '
+                f'--no-check-certificates '
+                f'--add-header "Referer:https://web.classplusapp.com/" '
+                f'--add-header "Origin:https://web.classplusapp.com" '
+                f'--add-header "User-Agent:Mozilla/5.0" '
+                f'--concurrent-fragments 10 '
+                f'--fragment-retries 10 '
+                f'--retries 10 '
+                f'-f "{ytf}" '
+                f'-o "{name}.mp4" "{url}"'
+            )
 
             # ---------------- CAPTIONS ---------------- #
 
