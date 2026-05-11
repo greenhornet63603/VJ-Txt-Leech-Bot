@@ -19,6 +19,25 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
+# ---------------- KEEP ALIVE ---------------- #
+
+from flask import Flask
+from threading import Thread
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot Running ✅"
+
+def run():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
 # ---------------- BOT ---------------- #
 
 bot = Client(
@@ -32,6 +51,7 @@ bot = Client(
 
 @bot.on_message(filters.command(["start"]))
 async def start(bot: Client, m: Message):
+
     await m.reply_text(
         f"<b>Hello {m.from_user.mention} 👋\n\n"
         f"I Am A TXT Link Downloader Bot.\n"
@@ -43,7 +63,9 @@ async def start(bot: Client, m: Message):
 
 @bot.on_message(filters.command("stop"))
 async def restart_handler(_, m):
+
     await m.reply_text("**Stopped 🚦**")
+
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 # ---------------- LINK PARSER ---------------- #
@@ -59,7 +81,6 @@ def parse_links(content):
         if not line:
             continue
 
-        # Extract URL
         urls = re.findall(r'https?://[^\s]+', line)
 
         if not urls:
@@ -67,17 +88,15 @@ def parse_links(content):
 
         url = urls[0].strip()
 
-        # Skip broken encoded classplus links
+        # skip broken encoded links
         if "media-cdn.classplusapp.comL" in url:
             continue
 
-        # Remove URL from title
         title = line.replace(url, "").strip()
 
-        # Clean dangerous chars
         title = re.sub(r'[\\/:*?"<>|#@]+', '', title)
 
-        # Remove emojis
+        # remove emojis
         title = re.sub(r'[^\w\s.-]', '', title)
 
         title = title.strip()
@@ -107,6 +126,7 @@ async def upload(bot: Client, m: Message):
     try:
 
         with open(x, "r", encoding="utf-8") as f:
+
             content = f.readlines()
 
         links = parse_links(content)
@@ -123,7 +143,9 @@ async def upload(bot: Client, m: Message):
         return
 
     if len(links) == 0:
+
         await m.reply_text("**No valid links found ❌**")
+
         return
 
     # ---------------- START INDEX ---------------- #
@@ -192,7 +214,10 @@ async def upload(bot: Client, m: Message):
 
     thumb = None
 
-    if raw_text6.startswith("http://") or raw_text6.startswith("https://"):
+    if (
+        raw_text6.startswith("http://")
+        or raw_text6.startswith("https://")
+    ):
 
         getstatusoutput(f"wget '{raw_text6}' -O 'thumb.jpg'")
 
@@ -243,7 +268,7 @@ async def upload(bot: Client, m: Message):
                         if match:
                             url = match.group(1)
 
-            # ---------------- Classplus ---------------- #
+            # ---------------- CLASSPLUS ---------------- #
 
             elif (
                 "classplusapp" in url
@@ -252,11 +277,26 @@ async def upload(bot: Client, m: Message):
 
                 try:
 
-                    # Already signed URL
-                    if "Expires=" in url or "Signature=" in url:
+                    # already signed
+                    if (
+                        "Expires=" in url
+                        or "Signature=" in url
+                        or "key=" in url
+                    ):
+
                         pass
 
                     else:
+
+                        # master.m3u8 → 720p
+                        if "/master.m3u8" in url:
+
+                            quality = raw_text2
+
+                            url = url.replace(
+                                "/master.m3u8",
+                                f"/{quality}/{quality}p.m3u8"
+                            )
 
                         response = requests.get(
                             "https://api.classplusapp.com/cams/uploader/video/jw-signed-url",
@@ -267,9 +307,11 @@ async def upload(bot: Client, m: Message):
                         data = response.json()
 
                         if "url" in data:
+
                             url = data["url"]
 
                 except Exception as e:
+
                     print(e)
 
             # ---------------- MPD FIX ---------------- #
@@ -278,13 +320,15 @@ async def upload(bot: Client, m: Message):
 
                 vid = url.split("/")[-2]
 
-                url = f"https://d26g5bnklkwsh4.cloudfront.net/{vid}/master.m3u8"
+                url = (
+                    f"https://d26g5bnklkwsh4.cloudfront.net/"
+                    f"{vid}/master.m3u8"
+                )
 
             # ---------------- SAFE FILE NAME ---------------- #
 
             name1 = links[i][0]
 
-            # Remove emojis and dangerous chars
             safe_name = re.sub(r'[^\w\s.-]', '', name1)
 
             safe_name = (
@@ -315,8 +359,8 @@ async def upload(bot: Client, m: Message):
 
                 ytf = (
                     f"b[height<={raw_text2}][ext=mp4]/"
-                    f"bv[height<={raw_text2}][ext=mp4]+ba[ext=m4a]/"
-                    f"b[ext=mp4]"
+                    f"bv[height<={raw_text2}][ext=mp4]+"
+                    f"ba[ext=m4a]/b[ext=mp4]"
                 )
 
             else:
@@ -326,11 +370,12 @@ async def upload(bot: Client, m: Message):
                     f"bv[height<={raw_text2}]+ba/b/bv+ba"
                 )
 
-            # ---------------- YT-DLP CMD ---------------- #
+            # ---------------- YT-DLP COMMAND ---------------- #
 
             cmd = (
                 f'yt-dlp '
                 f'--no-check-certificates '
+                f'--allow-unplayable-formats '
                 f'--add-header "Referer:https://web.classplusapp.com/" '
                 f'--add-header "Origin:https://web.classplusapp.com" '
                 f'--add-header "User-Agent:Mozilla/5.0" '
@@ -395,7 +440,8 @@ async def upload(bot: Client, m: Message):
 
                         cmd = (
                             f'yt-dlp '
-                            f'--add-header "Referer:https://web.classplusapp.com/" '
+                            f'--add-header '
+                            f'"Referer:https://web.classplusapp.com/" '
                             f'-o "{name}.pdf" "{url}"'
                         )
 
@@ -473,5 +519,7 @@ async def upload(bot: Client, m: Message):
     await m.reply_text("**Done Boss 😎**")
 
 # ---------------- RUN ---------------- #
+
+keep_alive()
 
 bot.run()
