@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import time
-import asyncio
 import requests
 
 import core as helper
@@ -20,6 +19,8 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
+# ---------------- BOT ---------------- #
+
 bot = Client(
     "bot",
     api_id=API_ID,
@@ -27,19 +28,16 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
-
 # ---------------- START ---------------- #
 
 @bot.on_message(filters.command(["start"]))
 async def start(bot: Client, m: Message):
     await m.reply_text(
         f"<b>Hello {m.from_user.mention} 👋\n\n"
-        f"I Am A Bot For Download Links From Your .TXT File "
-        f"And Then Upload That File On Telegram.\n\n"
-        f"Use /upload To Start.\n"
-        f"Use /stop to stop any ongoing task.</b>"
+        f"I Am A TXT Link Downloader Bot.\n"
+        f"Send /upload To Start.\n\n"
+        f"Use /stop to stop ongoing tasks.</b>"
     )
-
 
 # ---------------- STOP ---------------- #
 
@@ -48,47 +46,38 @@ async def restart_handler(_, m):
     await m.reply_text("**Stopped 🚦**")
     os.execl(sys.executable, sys.executable, *sys.argv)
 
-
 # ---------------- LINK PARSER ---------------- #
 
 def parse_links(content):
+
     links = []
 
-    url_pattern = r'(https?://[^\s]+)'
-
     for line in content:
+
         line = line.strip()
 
         if not line:
             continue
 
-        url_match = re.search(url_pattern, line)
+        urls = re.findall(r'https?://\S+', line)
 
-        if not url_match:
+        if not urls:
             continue
 
-        url = url_match.group(1).strip()
+        url = urls[0].strip()
 
-        # Remove URL from line
-        name = re.sub(url_pattern, '', line)
+        # Remove URL from title
+        title = line.replace(url, "").strip()
 
-        # Clean unwanted chars
-        name = (
-            name.replace("🎬", "")
-                .replace("»", "")
-                .replace("|", "")
-                .replace(":", "")
-                .replace("-", "")
-                .strip()
-        )
+        # Clean title
+        title = re.sub(r'[|:»🎬]+', '', title).strip()
 
-        if not name:
-            name = "Untitled Video"
+        if not title:
+            title = "Untitled"
 
-        links.append([name, url])
+        links.append([title, url])
 
     return links
-
 
 # ---------------- UPLOAD ---------------- #
 
@@ -106,6 +95,7 @@ async def upload(bot: Client, m: Message):
     # ---------------- READ TXT ---------------- #
 
     try:
+
         with open(x, "r", encoding="utf-8") as f:
             content = f.readlines()
 
@@ -114,7 +104,8 @@ async def upload(bot: Client, m: Message):
         os.remove(x)
 
     except Exception as e:
-        await m.reply_text(f"**Invalid file input.**\n\n{e}")
+
+        await m.reply_text(f"**Invalid TXT File ❌**\n\n`{e}`")
 
         if os.path.exists(x):
             os.remove(x)
@@ -122,15 +113,15 @@ async def upload(bot: Client, m: Message):
         return
 
     if len(links) == 0:
-        await m.reply_text("**No valid links found in TXT file.**")
+        await m.reply_text("**No valid links found ❌**")
         return
 
     # ---------------- START INDEX ---------------- #
 
     await editable.edit(
-        f"**Total Links Found 🔗 : {len(links)}**\n\n"
-        f"Send Starting Index\n\n"
-        f"Example: 1"
+        f"**Total Links Found :** `{len(links)}`\n\n"
+        f"Send Start Index\n\n"
+        f"Example: `1`"
     )
 
     input0: Message = await bot.listen(editable.chat.id)
@@ -141,7 +132,7 @@ async def upload(bot: Client, m: Message):
 
     # ---------------- BATCH NAME ---------------- #
 
-    await editable.edit("**Now Send Batch Name**")
+    await editable.edit("**Send Batch Name**")
 
     input1: Message = await bot.listen(editable.chat.id)
 
@@ -152,8 +143,8 @@ async def upload(bot: Client, m: Message):
     # ---------------- QUALITY ---------------- #
 
     await editable.edit(
-        "**Enter Resolution 📸**\n\n"
-        "144 / 240 / 360 / 480 / 720 / 1080"
+        "**Choose Quality 📸**\n\n"
+        "144\n240\n360\n480\n720\n1080"
     )
 
     input2: Message = await bot.listen(editable.chat.id)
@@ -164,7 +155,7 @@ async def upload(bot: Client, m: Message):
 
     # ---------------- CAPTION ---------------- #
 
-    await editable.edit("**Now Send Caption**")
+    await editable.edit("**Send Caption**")
 
     input3: Message = await bot.listen(editable.chat.id)
 
@@ -177,8 +168,8 @@ async def upload(bot: Client, m: Message):
     # ---------------- THUMB ---------------- #
 
     await editable.edit(
-        "Send Thumbnail URL\n\n"
-        "Or send: no"
+        "**Send Thumbnail URL**\n\n"
+        "Or send `no`"
     )
 
     input6: Message = await bot.listen(editable.chat.id)
@@ -212,7 +203,8 @@ async def upload(bot: Client, m: Message):
 
             url = links[i][1]
 
-            # Fix URLs
+            # ---------------- FIX URLS ---------------- #
+
             url = (
                 url.replace("file/d/", "uc?export=download&id=")
                 .replace("www.youtube-nocookie.com/embed", "youtu.be")
@@ -245,16 +237,22 @@ async def upload(bot: Client, m: Message):
 
             elif "videos.classplusapp" in url:
 
-                response = requests.get(
-                    f'https://api.classplusapp.com/cams/uploader/video/jw-signed-url?url={url}'
-                )
-
                 try:
-                    url = response.json()['url']
+
+                    response = requests.get(
+                        f'https://api.classplusapp.com/cams/uploader/video/jw-signed-url?url={url}',
+                        timeout=20
+                    )
+
+                    data = response.json()
+
+                    if "url" in data:
+                        url = data["url"]
+
                 except:
                     pass
 
-            # ---------------- MPD ---------------- #
+            # ---------------- MPD FIX ---------------- #
 
             elif "/master.mpd" in url:
 
@@ -262,7 +260,7 @@ async def upload(bot: Client, m: Message):
 
                 url = f"https://d26g5bnklkwsh4.cloudfront.net/{vid}/master.m3u8"
 
-            # ---------------- NAME ---------------- #
+            # ---------------- SAFE FILE NAME ---------------- #
 
             name1 = (
                 links[i][0]
@@ -280,7 +278,11 @@ async def upload(bot: Client, m: Message):
                 .strip()
             )
 
-            name = f'{str(count).zfill(3)}) {name1[:60]}'
+            safe_name = re.sub(r'[\\/:*?"<>|()]', "", name1)
+
+            safe_name = safe_name.replace(" ", "_")
+
+            name = f'{str(count).zfill(3)}_{safe_name[:60]}'
 
             # ---------------- FORMAT ---------------- #
 
@@ -299,29 +301,40 @@ async def upload(bot: Client, m: Message):
                     f"bv[height<={raw_text2}]+ba/b/bv+ba"
                 )
 
-            # ---------------- CMD ---------------- #
+            # ---------------- YT-DLP CMD ---------------- #
 
-            if "jw-prod" in url:
+            if "jw-prod" in url or "m3u8" in url:
 
-                cmd = f'yt-dlp -o "{name}.mp4" "{url}"'
+                cmd = (
+                    f'yt-dlp '
+                    f'--add-header "Referer:https://web.classplusapp.com/" '
+                    f'--add-header "User-Agent:Mozilla/5.0" '
+                    f'-o "{name}.mp4" "{url}"'
+                )
 
             else:
 
-                cmd = f'yt-dlp -f "{ytf}" "{url}" -o "{name}.mp4"'
+                cmd = (
+                    f'yt-dlp '
+                    f'--add-header "Referer:https://web.classplusapp.com/" '
+                    f'--add-header "User-Agent:Mozilla/5.0" '
+                    f'-f "{ytf}" "{url}" '
+                    f'-o "{name}.mp4"'
+                )
 
-            # ---------------- CAPTION ---------------- #
+            # ---------------- CAPTIONS ---------------- #
 
             cc = (
-                f'**[📽️] Vid_ID:** {str(count).zfill(3)}\n'
-                f'**Title:** {name1}\n'
-                f'**Batch:** {raw_text0}\n\n'
+                f'**📽️ Video ID :** `{str(count).zfill(3)}`\n'
+                f'**🎬 Title :** `{name1}`\n'
+                f'**📚 Batch :** `{raw_text0}`\n\n'
                 f'{MR}'
             )
 
             cc1 = (
-                f'**[📁] Pdf_ID:** {str(count).zfill(3)}\n'
-                f'**Title:** {name1}\n'
-                f'**Batch:** {raw_text0}\n\n'
+                f'**📁 PDF ID :** `{str(count).zfill(3)}`\n'
+                f'**📄 Title :** `{name1}`\n'
+                f'**📚 Batch :** `{raw_text0}`\n\n'
                 f'{MR}'
             )
 
@@ -361,13 +374,13 @@ async def upload(bot: Client, m: Message):
 
                     try:
 
-                        cmd = f'yt-dlp -o "{name}.pdf" "{url}"'
-
-                        download_cmd = (
-                            f"{cmd} -R 25 --fragment-retries 25"
+                        cmd = (
+                            f'yt-dlp '
+                            f'--add-header "Referer:https://web.classplusapp.com/" '
+                            f'-o "{name}.pdf" "{url}"'
                         )
 
-                        os.system(download_cmd)
+                        os.system(cmd)
 
                         await bot.send_document(
                             chat_id=m.chat.id,
@@ -392,9 +405,9 @@ async def upload(bot: Client, m: Message):
                 else:
 
                     show = (
-                        f"**Downloading ⬇️**\n\n"
-                        f"**Name »** `{name}`\n"
-                        f"**Quality »** `{raw_text2}`"
+                        f"**⬇️ Downloading Video...**\n\n"
+                        f"**📝 Name :** `{name}`\n"
+                        f"**🎞 Quality :** `{raw_text2}`"
                     )
 
                     prog = await m.reply_text(show)
@@ -426,20 +439,19 @@ async def upload(bot: Client, m: Message):
             except Exception as e:
 
                 await m.reply_text(
-                    f"**Downloading Interrupted ❌**\n\n"
-                    f"**Error:** `{str(e)}`\n\n"
-                    f"**Name:** `{name}`\n"
-                    f"**URL:** `{url}`"
+                    f"**❌ Download Failed**\n\n"
+                    f"**Error :** `{str(e)}`\n\n"
+                    f"**Name :** `{name}`\n\n"
+                    f"**URL :** `{url}`"
                 )
 
                 continue
 
     except Exception as e:
 
-        await m.reply_text(f"**Error:**\n`{e}`")
+        await m.reply_text(f"**Error ❌**\n\n`{e}`")
 
     await m.reply_text("**Done Boss 😎**")
-
 
 # ---------------- RUN ---------------- #
 
